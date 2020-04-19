@@ -1,8 +1,11 @@
 import allel
+import time
+import logging
+import datetime
+
+import sys
 import numpy as np
 import pandas as pd
-import time
-import sys
 
 def process_vit(vit_file):
     vit_matrix = []
@@ -245,3 +248,47 @@ def process_labels_weights(labels_file, masked_matrix, ind_IDs, average_parents,
 def center_masked_matrix(masked_matrix):
     masked_matrix -= np.nanmean(masked_matrix, axis=0)
     return masked_matrix
+
+
+def get_args(params_file):
+    all_args = set(['BEAGLE_OR_VCF', 'BEAGLE_FILE', 'VCF_FILE', 'IS_MASKED',
+                    'VIT_OR_FBK_OR_TSV', 'VIT_FILE', 'FBK_FILE', 'FB_OR_MSP', 'TSV_FILE',
+                    'NUM_ANCESTRIES', 'ANCESTRY', 'PROB_THRESH', 'AVERAGE_PARENTS',
+                    'IS_WEIGHTED', 'LABELS_FILE', 'OUTPUT_FILE', 'SCATTERPLOT_FILE',
+                    'SAVE_MASKED_MATRIX', 'SAVE_MASKED_MATRIX', 'MASKED_MATRIX_FILE',
+                    'SAVE_COVARIANCE_MATRIX', 'COVARIANCE_MATRIX_FILE'])
+    args = {}
+    with open(params_filename) as fp:
+        for line in file:
+            line = line.strip()
+            if line.startswith("#"):
+                continue
+            key_value = line.split('=')
+            if len(key_value) == 2:
+                params[key_value[0].strip()] = key_value[1].strip()
+            else:
+                raise Warning
+
+
+def logger_config(verbose=False):
+    logging_config = {"version": 1, "disable_existing_loggers": False}
+    fmt = '[%(levelname)-5.s] %(asctime)s: %(message)s'
+    logging_config["formatters"] = {"basic": {"format": fmt, "datefmt": "%Y-%m-%d %H:%M:%S"}}
+    now = datetime.datetime.now()
+
+    logging_config["handlers"] = {
+            "console": {
+                "class": "logging.StreamHandler",
+                "level": "DEBUG" if verbose else "INFO",
+                "formatter": "basic",
+                "stream": "ext://sys.stdout"
+            },
+            "info_file_handler": {
+                "class": "logging.handlers.RotatingFileHandler",
+                "level": "DEBUG" if verbose else "INFO", 
+                "formatter": "basic",
+                "filename": f"log{now.year}_{now.month}_{now.day}__{now.hour}_{now.minute}.txt", # choose a better name or name as param?
+                "encoding": "utf8"
+                }
+            }
+    return logging_config
