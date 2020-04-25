@@ -270,27 +270,31 @@ def get_args(params_file):
                 raise Warning
 
 
-def logger_config(verbose=False):
+def logger_config(verbose=True):
     logging_config = {"version": 1, "disable_existing_loggers": False}
-    fmt = '[%(levelname)-5.s] %(asctime)s: %(message)s'
+    fmt = '[%(levelname)s] %(asctime)s: %(message)s'
     logging_config["formatters"] = {"basic": {"format": fmt, "datefmt": "%Y-%m-%d %H:%M:%S"}}
     now = datetime.datetime.now()
 
     logging_config["handlers"] = {
             "console": {
                 "class": "logging.StreamHandler",
-                #"level": "DEBUG" if verbose else "INFO",
-                "level": "DEBUG",
+                "level": "DEBUG" if verbose else "INFO",
                 "formatter": "basic",
                 "stream": "ext://sys.stdout"
             },
             "info_file_handler": {
                 "class": "logging.handlers.RotatingFileHandler",
-                #"level": "DEBUG" if verbose else "INFO", 
-                "level": "DEBUG",
+                "level": "DEBUG" if verbose else "INFO", 
                 "formatter": "basic",
+                "maxBytes": 10485760,
+                "backupCount": 20,
                 "filename": f"log{now.year}_{now.month}_{now.day}__{now.hour}_{now.minute}.txt", # choose a better name or name as param?
                 "encoding": "utf8"
                 }
+            }
+    logging_config["root"] = {
+                "level": "DEBUG",
+                "handlers": ["console", "info_file_handler"]
             }
     return logging_config

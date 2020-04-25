@@ -227,8 +227,9 @@ def run(params_filename):
 
 
 def main():
+    logging.config.dictConfig(logger_config(True))
+    logging.info("Total time ---  seconds ---")
     params_filename = sys.argv[1]
-    #logging.config.dictConfig(logger_config(True))
     start_time = time.time()
     run(params_filename)
     logging.info("Total time --- %s seconds ---" % (time.time() - start_time))
