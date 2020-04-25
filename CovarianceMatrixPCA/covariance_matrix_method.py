@@ -2,7 +2,8 @@ import sys
 import time
 import gc
 import logging
-import os
+import logging.config
+import os, pdb
 
 import numpy as np
 import pandas as pd
@@ -168,29 +169,31 @@ def get_args(params_file):
     bool_args = ['IS_MASKED', 'AVERAGE_PARENTS', 'IS_WEIGHTED', 'SAVE_MASKED_MATRIX', 
             'SAVE_COVARIANCE_MATRIX']
     args = {}
-    with open(params_filename) as fp:
-        for line in file:
+    with open(params_file) as fp:
+        for line in fp:
             line = line.strip()
             if line.startswith("#"):
                 continue
             key_value = line.split('=')
             if len(key_value) == 2:
-                if key_value[0] not in all_args:
-                    logging.warning(f'parameter {key_value[0]} is not an allowed parameter. Ignored!')
+                key, value = key_value[0].strip(), key_value[1].strip()
+                if key not in all_args:
+                    logging.warning(f'parameter {key} is not an allowed parameter. Ignored!')
                 else:
-                    params[key_value[0].strip()] = key_value[1].strip()
-            else: 
+                    args[key] = value
+            else:
                 logging.warning(f'Line "{line}" does not follow the param=value format. Ignored!')
     keys = set(args.keys())
     remaining_keys = all_args - keys
-    if remaining_keys: 
+    if remaining_keys:
         logging.error(f'Please specify all required keys! {remaining_keys} are missing')
+        print(f'Please specify all required keys! {remaining_keys} are missing')
         raise ValueError
     for val in int_args:
-        args[val] = int(args[val]) 
+        args[val] = int(args[val])
     for val in bool_args:
         args[val] = bool(strtobool(args[val]) )
-    logging.Debug(f"parameters used are: {args}")
+    logging.debug(f"parameters used are: {args}")
     return args
 
 
@@ -225,7 +228,7 @@ def run(params_filename):
 
 def main():
     params_filename = sys.argv[1]
-    logging_config.dictConfig(logger_config(True))
+    #logging.config.dictConfig(logger_config(True))
     start_time = time.time()
     run(params_filename)
     logging.info("Total time --- %s seconds ---" % (time.time() - start_time))

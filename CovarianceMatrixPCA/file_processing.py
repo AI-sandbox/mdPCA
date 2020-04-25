@@ -279,13 +279,15 @@ def logger_config(verbose=False):
     logging_config["handlers"] = {
             "console": {
                 "class": "logging.StreamHandler",
-                "level": "DEBUG" if verbose else "INFO",
+                #"level": "DEBUG" if verbose else "INFO",
+                "level": "DEBUG",
                 "formatter": "basic",
                 "stream": "ext://sys.stdout"
             },
             "info_file_handler": {
                 "class": "logging.handlers.RotatingFileHandler",
-                "level": "DEBUG" if verbose else "INFO", 
+                #"level": "DEBUG" if verbose else "INFO", 
+                "level": "DEBUG",
                 "formatter": "basic",
                 "filename": f"log{now.year}_{now.month}_{now.day}__{now.hour}_{now.minute}.txt", # choose a better name or name as param?
                 "encoding": "utf8"

@@ -3,3 +3,5 @@ cvxpy==1.0.28
 numpy==1.18.1
 scikit-learn==0.22.1
 scikit-bio==0.5.6 
+plotly-express==0.4.1
+scikit-allel==1.2.1
