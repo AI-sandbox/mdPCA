@@ -31,7 +31,7 @@ def cov(x):
     result = (np.ma.dot(x, x.T, strict=False) / fact).squeeze()
     return result
 
-def run_cov_matrix(X_incomplete, weights, save_cov_matrix, cov_matrix_filename, complete=False):
+def run_cov_matrix(X_incomplete, weights, save_cov_matrix, cov_matrix_filename, robust=False):
     start_time = time.time()
     X_incomplete = np.ma.array(X_incomplete, mask=np.isnan(X_incomplete))
     S = cov(X_incomplete).data
@@ -44,11 +44,11 @@ def run_cov_matrix(X_incomplete, weights, save_cov_matrix, cov_matrix_filename, 
     logging.info("Covariance Matrix --- %s seconds ---" % (time.time() - start_time))
     W = np.diag(weights)
     WSW = np.matmul(np.matmul(np.sqrt(W), S), np.sqrt(W))
-    if complete: 
+    if robust: 
         pass
     if save_cov_matrix:
         np.save(cov_matrix_filename, S.data)
-        if complete:
+        if robust:
             base, ext = os.path.split(cov_matrix_filename)
             np.save(f"{base}_completed_{lam}.{ext}", S.data)
     return WSW, S, W
@@ -143,11 +143,11 @@ def scatter_plot(X_projected, scatterplot_filename, output_filename, ind_IDs, la
     plotly.offline.plot(scatter, filename = scatterplot_filename, auto_open=False)
     plot_df.to_csv(output_filename, columns=['ID', 'x', 'y'], sep='\t', index=False)
     
-def run_method(beagle_or_vcf, beagle_filename, vcf_filename, is_masked, vit_or_fbk_or_tsv, vit_filename, fbk_filename, fb_or_msp, tsv_filename, num_ancestries, ancestry, prob_thresh, average_parents, is_weighted, labels_filename, output_filename, scatterplot_filename, save_masked_matrix, masked_matrix_filename, save_cov_matrix, cov_matrix_filename):
+def run_method(beagle_or_vcf, beagle_filename, vcf_filename, is_masked, vit_or_fbk_or_tsv, vit_filename, fbk_filename, fb_or_msp, tsv_filename, num_ancestries, ancestry, prob_thresh, average_parents, is_weighted, labels_filename, output_filename, scatterplot_filename, save_masked_matrix, masked_matrix_filename, save_cov_matrix, cov_matrix_filename, robust):
     X_incomplete, ind_IDs, rs_IDs = get_masked_matrix(beagle_filename, vcf_filename, beagle_or_vcf, is_masked, vit_filename, fbk_filename, tsv_filename, vit_or_fbk_or_tsv, fb_or_msp, num_ancestries, ancestry, average_parents, prob_thresh)
     X_incomplete, ind_IDs, labels, weights = process_labels_weights(labels_filename, X_incomplete, ind_IDs, average_parents, is_weighted, save_masked_matrix, masked_matrix_filename)
-    WSW, S, W = run_cov_matrix(X_incomplete, weights, save_cov_matrix, cov_matrix_filename)
-    if not complete:
+    WSW, S, W = run_cov_matrix(X_incomplete, weights, save_cov_matrix, cov_matrix_filename, robust)
+    if not robust:
         X_projected, pc1_percentvar, pc2_percentvar = project_weighted_matrix(WSW, S, W)
     else:
         pass
@@ -163,11 +163,11 @@ def get_args(params_file):
                     'NUM_ANCESTRIES', 'ANCESTRY', 'PROB_THRESH', 'AVERAGE_PARENTS', 
                     'IS_WEIGHTED', 'LABELS_FILE', 'OUTPUT_FILE', 'SCATTERPLOT_FILE', 
                     'SAVE_MASKED_MATRIX', 'SAVE_MASKED_MATRIX', 'MASKED_MATRIX_FILE', 
-                    'SAVE_COVARIANCE_MATRIX', 'COVARIANCE_MATRIX_FILE'])
+                    'SAVE_COVARIANCE_MATRIX', 'COVARIANCE_MATRIX_FILE', 'ROBUST'])
     int_args = ['BEAGLE_OR_VCF', 'VIT_OR_FBK_OR_TSV', 'FB_OR_MSP', 'NUM_ANCESTRIES',
                 'ANCESTRY']
     bool_args = ['IS_MASKED', 'AVERAGE_PARENTS', 'IS_WEIGHTED', 'SAVE_MASKED_MATRIX', 
-            'SAVE_COVARIANCE_MATRIX']
+            'SAVE_COVARIANCE_MATRIX', 'ROBUST']
     args = {}
     with open(params_file) as fp:
         for line in fp:
