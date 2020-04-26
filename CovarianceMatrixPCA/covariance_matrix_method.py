@@ -25,16 +25,59 @@ def cov(x):
     rowvar = 1
     axis = 1 - rowvar
     xnotmask = np.logical_not(xmask).astype(np.float32) # why float32 and not bool?
+    # Because if it is bool, 'np.dot(xnotmask, xnotmask.T)' in the next line would do boolean addition instead of float addition. So 'fact' would have 0 / 1 values instead of the number of unmasked entries used for computation of covariance for each pair of individuals. 
     fact = np.dot(xnotmask, xnotmask.T) * 1. - ddof
     del(xnotmask)
     gc.collect()
     result = (np.ma.dot(x, x.T, strict=False) / fact).squeeze()
     return result
 
+def compute_strength_vector(X):
+    strength_vector = np.sum(~np.isnan(X), axis=1) / X.shape[1]
+    return strength_vector
+
+def compute_strength_matrix(X):
+    notmask = (~np.isnan(X)).astype(np.float32)
+    strength_matrix = np.dot(notmask, notmask.T)
+    strength_matrix /= X.shape[1]
+    return strength_matrix
+
+def create_validation_mask(X_incomplete, percent_inds):
+    masked_rows = np.isnan(X_incomplete).any(axis=1)
+    masked_inds = np.flatnonzero(masked_rows)
+    X_masked = X_incomplete[masked_rows]
+    percent_masked = 100 * np.isnan(X_masked).sum() / (X_masked.shape[0] * X_masked.shape[1])
+    unmasked_rows = ~masked_rows
+    X_unmasked = X_incomplete[unmasked_rows]
+    masked_rows = np.random.choice(range(X_unmasked.shape[0]), size=int(X_unmasked.shape[0] * percent_inds / 100), replace=False)
+    X_masked_rows = X_unmasked[masked_rows,:]
+    mask = np.zeros(X_masked_rows.shape[0] * X_masked_rows.shape[1], dtype=np.int8)
+    mask[:int(X_masked_rows.shape[0] * X_masked_rows.shape[1] * percent_masked / 100)] = 1
+    np.random.shuffle(mask)
+    mask = mask.astype(bool)
+    mask = mask.reshape(X_masked_rows.shape)
+    X_masked_rows[mask] = np.nan
+    X_unmasked[masked_rows] = X_masked_rows
+    X_incomplete[unmasked_rows] = X_unmasked
+    masked_rows_new = np.isnan(X_incomplete).any(axis=1)
+    masked_inds_new = np.flatnonzero(masked_rows_new)
+    masked_inds_val = sorted(list(set(masked_inds_new) - set(masked_inds)))
+    return X_incomplete, masked_inds_val
+
 def run_cov_matrix(X_incomplete, weights, save_cov_matrix, cov_matrix_filename, robust=False):
     start_time = time.time()
     X_incomplete = np.ma.array(X_incomplete, mask=np.isnan(X_incomplete))
     S = cov(X_incomplete).data
+    X_incomplete =  X_incomplete.data
+    strength_vec = compute_strength_vector(X_incomplete)
+    strength_mat = compute_strength_matrix(X_incomplete)
+    percent_inds_val = 20 # Percent of unmasked individuals to be masked for cross-validation 
+    X_incomplete, masked_inds_val = create_validation_mask(X_incomplete, percent_inds_val) # masked_inds_val is the list of indices of the individuals masked for validation
+    X_incomplete = np.ma.array(X_incomplete, mask=np.isnan(X_incomplete))
+    S_prime = cov(X_incomplete).data
+    X_incomplete =  X_incomplete.data
+    strength_vec_prime = compute_strength_vector(X_incomplete)
+    strength_mat_prime = compute_strength_matrix(X_incomplete)
     weights_normalized = weights / weights.sum()
     weighted_sum = np.matmul(weights_normalized, S)
     weighted_rowsum = weighted_sum.reshape((1, S.shape[0]))
