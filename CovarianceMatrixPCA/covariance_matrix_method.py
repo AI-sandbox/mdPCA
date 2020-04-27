@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import plotly_express as px
 import plotly
 import cvxpy as cvx
-from scipy.linalg import svds
+from scipy.sparse.linalg import svds
 from distutils.util import strtobool
 from file_processing import get_masked_matrix, process_labels_weights, logger_config
 from scipy.spatial.distance import squareform, pdist
@@ -39,6 +39,15 @@ def cov(x):
 def compute_strength_vector(X):
     strength_vector = np.sum(~np.isnan(X), axis=1) / X.shape[1]
     return strength_vector
+
+
+#@nb.njit
+def mask_dot(mask):
+    dot = np.empty((mask.shape[0], mask.shape[0]))
+    for i, row in mask:
+        for j, col in mask.T:
+            pass
+    pass
 
 def compute_strength_matrix(X):
     notmask = (~np.isnan(X)).astype(np.float32)
@@ -81,23 +90,23 @@ def run_cov_matrix(X_incomplete, weights, save_cov_matrix, cov_matrix_filename, 
     start_time = time.time()
     X_incomplete = np.ma.array(X_incomplete, mask=np.isnan(X_incomplete))
     S, strength_vec, strength_mat = cov(X_incomplete)
-    del X_incomplete
-    gc.collect()
     weights_normalized = weights / weights.sum()
     S = demean(S, weights_normalized)
-    pdb.set_trace()
     logging.info("Covariance Matrix --- %s seconds ---" % (time.time() - start_time))
     W = np.diag(weights)
     if robust: 
-        X_incomplete, masked_inds_val = create_validation_mask(X_incomplete.data, percent_inds_val) # masked_inds_val is the list of indices of the individuals masked for validation
+        logging.info("Starting matrix completion. This will take a few minutes...")
+        start_time = time.time()
         percent_inds_val = 20 # Percent of unmasked individuals to be masked for cross-validation 
+        X_incomplete, masked_inds_val = create_validation_mask(X_incomplete.data, percent_inds_val) # masked_inds_val is the list of indices of the individuals masked for validation
         X_incomplete = np.ma.array(X_incomplete, mask=np.isnan(X_incomplete))
         S_prime, w_vec_prime, w_mat_prime = cov(X_incomplete)
         del X_incomplete
         gc.collect()
         S_prime = demean(S_prime, weights_normalized)
-        matrix_completion(S, strength_mat, S_prime, w_mat_prime, lams=None, method="NN", 
-                cv_inds=masked_inds)
+        S, lam = matrix_completion(S, strength_mat, S_prime, w_mat_prime, lams=None, method="NN", 
+                cv_inds=masked_inds_val)
+        logging.info(f"Covariance Matrix --- %{time.time() - start_time:.2}s seconds ---")
     WSW = np.matmul(np.matmul(np.sqrt(W), S), np.sqrt(W))
     if save_cov_matrix:
         np.save(cov_matrix_filename, S.data)
@@ -147,11 +156,15 @@ def NN_matrix_completion(cov, w, lam, cov0, verbose=False):
     if cov0 is None:
         u, s, v = svds(cov, k=10)
         cov0 = u@np.diag(s)@u.T
-    X.value = cov0
+    try: 
+        X.value = cov0
+    except ValueError:
+        X.value = None
+        logging.info("cov0 ignored")
     obj = cvx.Minimize(lam * cvx.norm(X, "nuc") +
                        cvx.sum_squares(cvx.multiply(np.sqrt(w), cov - X)))
     prob = cvx.Problem(obj, [])
-    sol = prob.solve(warm_start=True, solver=cvx.SCS, vebose=verbose)
+    sol = prob.solve(warm_start=True, solver=cvx.SCS, verbose=verbose)
     return X.value
 
 def cov_to_dist(cov_matrix):
@@ -162,7 +175,7 @@ def cov_to_dist(cov_matrix):
     return squareform(dist_array)
 
 
-def matrix_completin(cov, w, cv_cov, cv_w, cv_inds=None, lams=None, method="NN",
+def matrix_completion(cov, w, cv_cov, cv_w, cv_inds=None, lams=None, method="NN",
         verbose=False, ncpus=None, parallel=False):
     """ 
     objective: lam ||X||_* + ||w^1/2 (cov - X)||_2^2  with X = PSD 
@@ -185,7 +198,7 @@ def matrix_completin(cov, w, cv_cov, cv_w, cv_inds=None, lams=None, method="NN",
     """
     def dispatcher(method, **kwargs):
         if method == "NN":
-            return NN_matrix_completion(**kwargs):
+            return NN_matrix_completion(**kwargs)
 
     w *= 1/np.max(w)
     if lams is None:
@@ -196,7 +209,7 @@ def matrix_completin(cov, w, cv_cov, cv_w, cv_inds=None, lams=None, method="NN",
     if cv_inds is not None:
         dist = dist[cv_inds, :][:, cv_inds]
     u, s, v = svds(cov, k=10)
-    warm_start = u @ np.diag(s) @ u.T
+    warm_start = u @ np.diag(s) @ u.T + np.eye(cov.shape[0]) * s[0]/100 
     performance, score  = [], 0
     for i, lam in enumerate(lams): # not parallel
         if lam < 1e-4: 
@@ -205,12 +218,12 @@ def matrix_completin(cov, w, cv_cov, cv_w, cv_inds=None, lams=None, method="NN",
         if cv_inds is not None:
         # Using a known subset to cv
             cv_dist = cov_to_dist(val)[cv_inds, :][:, cv_inds]
-            tmp = mantel(cv_dist, dist)
+            tmp = mantel(cv_dist, dist)[0]
         if tmp > score:
             l = lam
             score = tmp
     recon = dispatcher(method, **{"cov": cv_cov, "cov0":warm_start, "w": cv_w, "lam":l})
-    return recon
+    return recon, l
 
 def scatter_plot(X_projected, scatterplot_filename, output_filename, ind_IDs, labels):
     plot_df = pd.DataFrame()
@@ -229,7 +242,7 @@ def run_method(beagle_or_vcf, beagle_filename, vcf_filename, is_masked, vit_or_f
     if not robust:
         X_projected, pc1_percentvar, pc2_percentvar = project_weighted_matrix(WSW, S, W)
     else:
-        pass
+        X_projected, pc1_percentvar, pc2_percentvar = project_weighted_matrix(WSW, S, W)
 
     scatter_plot(X_projected, scatterplot_filename, output_filename, ind_IDs, labels)
     print("Percent variance explained by the 1st principal component: ", pc1_percentvar)
