@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import plotly_express as px
 import plotly
 import cvxpy as cvx
+from scipy.linalg import svds
 from distutils.util import strtobool
 from file_processing import get_masked_matrix, process_labels_weights, logger_config
 from scipy.spatial.distance import squareform, pdist
@@ -80,7 +81,6 @@ def run_cov_matrix(X_incomplete, weights, save_cov_matrix, cov_matrix_filename, 
     start_time = time.time()
     X_incomplete = np.ma.array(X_incomplete, mask=np.isnan(X_incomplete))
     S, strength_vec, strength_mat = cov(X_incomplete)
-    pdb.set_trace()
     del X_incomplete
     gc.collect()
     weights_normalized = weights / weights.sum()
@@ -154,7 +154,16 @@ def NN_matrix_completion(cov, w, lam, cov0, verbose=False):
     sol = prob.solve(warm_start=True, solver=cvx.SCS, vebose=verbose)
     return X.value
 
-def matrix_completin(cov, w, cv_cov, cv_w, cv_inds=None, lams=None,  verbose=False, ncpus=None, parallel=False):
+def cov_to_dist(cov_matrix):
+    svd = TruncatedSVD(2, algorithm="arpack")
+    X_projected = svd.fit_transform(cov_matrix)
+    coordinates_array = np.array(X_projected[:,:2])
+    dist_array = pdist(coordinates_array)
+    return squareform(dist_array)
+
+
+def matrix_completin(cov, w, cv_cov, cv_w, cv_inds=None, lams=None, method="NN",
+        verbose=False, ncpus=None, parallel=False):
     """ 
     objective: lam ||X||_* + ||w^1/2 (cov - X)||_2^2  with X = PSD 
 
@@ -174,15 +183,34 @@ def matrix_completin(cov, w, cv_cov, cv_w, cv_inds=None, lams=None,  verbose=Fal
     X : n x n
         Completed matrix
     """
-    lams = lams if lams not None else 
-    if cv_inds is not None: 
+    def dispatcher(method, **kwargs):
+        if method == "NN":
+            return NN_matrix_completion(**kwargs):
+
+    w *= 1/np.max(w)
+    if lams is None:
+        lams = np.array([.05,.01, .005, .001, .0001, .00005])
+        lams /= np.mean(w)
+        lams *= w.shape[0]
+    dist = cov_to_dist(cov)
+    if cv_inds is not None:
+        dist = dist[cv_inds, :][:, cv_inds]
+    u, s, v = svds(cov, k=10)
+    warm_start = u @ np.diag(s) @ u.T
+    performance, score  = [], 0
+    for i, lam in enumerate(lams): # not parallel
+        if lam < 1e-4: 
+            continue 
+        val = dispatcher(method, **{"cov": cv_cov, "cov0":warm_start, "w": cv_w, "lam":lam})
+        if cv_inds is not None:
         # Using a known subset to cv
-        
-
-
-    
-    pass 
-
+            cv_dist = cov_to_dist(val)[cv_inds, :][:, cv_inds]
+            tmp = mantel(cv_dist, dist)
+        if tmp > score:
+            l = lam
+            score = tmp
+    recon = dispatcher(method, **{"cov": cv_cov, "cov0":warm_start, "w": cv_w, "lam":l})
+    return recon
 
 def scatter_plot(X_projected, scatterplot_filename, output_filename, ind_IDs, labels):
     plot_df = pd.DataFrame()
