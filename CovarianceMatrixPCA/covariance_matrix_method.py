@@ -16,6 +16,7 @@ from distutils.util import strtobool
 from file_processing import get_masked_matrix, process_labels_weights, logger_config
 from scipy.spatial.distance import squareform, pdist
 from skbio.stats.distance import mantel
+import numba as nb
 
 
 def cov(x):
@@ -24,13 +25,15 @@ def cov(x):
     xmask = np.ma.getmaskarray(x)
     rowvar = 1
     axis = 1 - rowvar
-    xnotmask = np.logical_not(xmask).astype(np.float32) # why float32 and not bool?
-    # Because if it is bool, 'np.dot(xnotmask, xnotmask.T)' in the next line would do boolean addition instead of float addition. So 'fact' would have 0 / 1 values instead of the number of unmasked entries used for computation of covariance for each pair of individuals. 
+    xnotmask = np.logical_not(xmask).astype(np.float32) 
     fact = np.dot(xnotmask, xnotmask.T) * 1. - ddof
     del(xnotmask)
     gc.collect()
     result = (np.ma.dot(x, x.T, strict=False) / fact).squeeze()
-    return result
+    x =  x.data
+    strength_vec = compute_strength_vector(x)
+    strength_mat = compute_strength_matrix(x)
+    return result.data, strength_vec, strength_mat
 
 def compute_strength_vector(X):
     strength_vector = np.sum(~np.isnan(X), axis=1) / X.shape[1]
@@ -45,7 +48,7 @@ def compute_strength_matrix(X):
 def create_validation_mask(X_incomplete, percent_inds):
     masked_rows = np.isnan(X_incomplete).any(axis=1)
     masked_inds = np.flatnonzero(masked_rows)
-    X_masked = X_incomplete[masked_rows]
+    X_masked = X_incomplete[masked_rows] 
     percent_masked = 100 * np.isnan(X_masked).sum() / (X_masked.shape[0] * X_masked.shape[1])
     unmasked_rows = ~masked_rows
     X_unmasked = X_incomplete[unmasked_rows]
@@ -64,31 +67,38 @@ def create_validation_mask(X_incomplete, percent_inds):
     masked_inds_val = sorted(list(set(masked_inds_new) - set(masked_inds)))
     return X_incomplete, masked_inds_val
 
+def demean(S, w):
+    w_sum = np.matmul(w, S)
+    w_rowsum = w_sum.reshape((1, S.shape[0]))
+    w_colsum = w_sum.reshape((S.shape[0], 1))
+    w_totalsum = np.dot(w_sum, w)
+    S -= (w_rowsum + w_colsum) -  w_totalsum
+    return S
+
+
 def run_cov_matrix(X_incomplete, weights, save_cov_matrix, cov_matrix_filename, robust=False):
     start_time = time.time()
     X_incomplete = np.ma.array(X_incomplete, mask=np.isnan(X_incomplete))
-    S = cov(X_incomplete).data
-    X_incomplete =  X_incomplete.data
-    strength_vec = compute_strength_vector(X_incomplete)
-    strength_mat = compute_strength_matrix(X_incomplete)
-    percent_inds_val = 20 # Percent of unmasked individuals to be masked for cross-validation 
-    X_incomplete, masked_inds_val = create_validation_mask(X_incomplete, percent_inds_val) # masked_inds_val is the list of indices of the individuals masked for validation
-    X_incomplete = np.ma.array(X_incomplete, mask=np.isnan(X_incomplete))
-    S_prime = cov(X_incomplete).data
-    X_incomplete =  X_incomplete.data
-    strength_vec_prime = compute_strength_vector(X_incomplete)
-    strength_mat_prime = compute_strength_matrix(X_incomplete)
+    S, strength_vec, strength_mat = cov(X_incomplete)
+    pdb.set_trace()
+    del X_incomplete
+    gc.collect()
     weights_normalized = weights / weights.sum()
-    weighted_sum = np.matmul(weights_normalized, S)
-    weighted_rowsum = weighted_sum.reshape((1, S.shape[0]))
-    weighted_colsum = weighted_sum.reshape((S.shape[0], 1))
-    weighted_totalsum = np.dot(weighted_sum, weights_normalized)
-    S = S - weighted_rowsum - weighted_colsum + weighted_totalsum
+    S = demean(S, weights_normalized)
+    pdb.set_trace()
     logging.info("Covariance Matrix --- %s seconds ---" % (time.time() - start_time))
     W = np.diag(weights)
-    WSW = np.matmul(np.matmul(np.sqrt(W), S), np.sqrt(W))
     if robust: 
-        pass
+        X_incomplete, masked_inds_val = create_validation_mask(X_incomplete.data, percent_inds_val) # masked_inds_val is the list of indices of the individuals masked for validation
+        percent_inds_val = 20 # Percent of unmasked individuals to be masked for cross-validation 
+        X_incomplete = np.ma.array(X_incomplete, mask=np.isnan(X_incomplete))
+        S_prime, w_vec_prime, w_mat_prime = cov(X_incomplete)
+        del X_incomplete
+        gc.collect()
+        S_prime = demean(S_prime, weights_normalized)
+        matrix_completion(S, strength_mat, S_prime, w_mat_prime, lams=None, method="NN", 
+                cv_inds=masked_inds)
+    WSW = np.matmul(np.matmul(np.sqrt(W), S), np.sqrt(W))
     if save_cov_matrix:
         np.save(cov_matrix_filename, S.data)
         if robust:
@@ -106,7 +116,7 @@ def project_weighted_matrix(WSW, S, W):
     return X_projected, pc1_percentvar, pc2_percentvar
 
 
-def NN_matrix_completion(cov, w, lam, cov0=None, verbose=False):
+def NN_matrix_completion(cov, w, lam, cov0, verbose=False):
     """ Nuclear norm matrix completion (as in Candes and Recht, 2009 for a PSD matrix)
         objective: lam ||X||_* + ||w^1/2 (cov - X)||_2^2  with X = PSD 
 
@@ -144,7 +154,7 @@ def NN_matrix_completion(cov, w, lam, cov0=None, verbose=False):
     sol = prob.solve(warm_start=True, solver=cvx.SCS, vebose=verbose)
     return X.value
 
-def matrix_completin(G, lams=None,  verbose=False, ncpus=None, parallel=False):
+def matrix_completin(cov, w, cv_cov, cv_w, cv_inds=None, lams=None,  verbose=False, ncpus=None, parallel=False):
     """ 
     objective: lam ||X||_* + ||w^1/2 (cov - X)||_2^2  with X = PSD 
 
@@ -156,12 +166,6 @@ def matrix_completin(G, lams=None,  verbose=False, ncpus=None, parallel=False):
     w : n x n
         Weight matrix for confidence in elements of cov 
 
-    lam : float
-        Regularization parameter determining the rank of the solution. Higher lam -> lower rank
-
-    cov0 : n x n, optional
-        Starting solution
-
     verbose : bool, default = False
         verbosity level of cvxpy
 
@@ -170,6 +174,10 @@ def matrix_completin(G, lams=None,  verbose=False, ncpus=None, parallel=False):
     X : n x n
         Completed matrix
     """
+    lams = lams if lams not None else 
+    if cv_inds is not None: 
+        # Using a known subset to cv
+        
 
 
     
@@ -244,28 +252,6 @@ def run(params_filename):
     args = get_args(params_filename)
     kwargs = {key.lower().replace("covariance", "cov").replace("file", "filename"): 
             args[key] for key in args.keys()}
-#    beagle_or_vcf = int(params['BEAGLE_OR_VCF'])
-#    beagle_filename = str(params['BEAGLE_FILE'])
-#    vcf_filename = str(params['VCF_FILE'])
-#    is_masked = bool(strtobool(params['IS_MASKED']))
-#    vit_or_fbk_or_tsv = int(params['VIT_OR_FBK_OR_TSV'])
-#    vit_filename = str(params['VIT_FILE'])
-#    fbk_filename = str(params['FBK_FILE'])
-#    fb_or_msp = int(params['FB_OR_MSP'])
-#    tsv_filename = str(params['TSV_FILE'])
-#    num_ancestries = int(params['NUM_ANCESTRIES'])
-#    ancestry = int(params['ANCESTRY'])
-#    prob_thresh = float(params['PROB_THRESH'])
-#    average_parents = bool(strtobool(params['AVERAGE_PARENTS']))
-#    is_weighted = bool(strtobool(params['IS_WEIGHTED']))
-#    labels_filename = str(params['LABELS_FILE'])
-#    output_filename = str(params['OUTPUT_FILE'])
-#    scatterplot_filename = str(params['SCATTERPLOT_FILE'])
-#    save_masked_matrix = bool(strtobool(params['SAVE_MASKED_MATRIX']))
-#    masked_matrix_filename = str(params['MASKED_MATRIX_FILE'])
-#    save_cov_matrix = bool(strtobool(params['SAVE_COVARIANCE_MATRIX']))
-#    cov_matrix_filename = str(params['COVARIANCE_MATRIX_FILE'])
-#    run_method(beagle_or_vcf, beagle_filename, vcf_filename, is_masked, vit_or_fbk_or_tsv, vit_filename, fbk_filename, fb_or_msp, tsv_filename, num_ancestries, ancestry, prob_thresh, average_parents, is_weighted, labels_filename, output_filename, scatterplot_filename, save_masked_matrix, masked_matrix_filename, save_cov_matrix, cov_matrix_filename)
     run_method(**kwargs)
 
 
