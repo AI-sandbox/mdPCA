@@ -17,7 +17,8 @@ from distutils.util import strtobool
 from file_processing import get_masked_matrix, process_labels_weights, logger_config
 from scipy.spatial.distance import squareform, pdist
 from skbio.stats.distance import mantel
-import numba as nb
+import scipy
+from sklearn.utils import check_array
 
 
 def cov(x):
@@ -36,24 +37,35 @@ def cov(x):
     strength_mat = compute_strength_matrix(x)
     return result.data, strength_vec, strength_mat
 
+#@profile
+def direct_dot(A):
+    if A.flags.c_contiguous:
+        A = check_array(A, copy=False, order="F")
+    dot = scipy.linalg.get_blas_funcs("syrk", (A,))
+    m = dot(alpha=1.0, a=A)
+    m += m.T 
+    m -= np.diag(np.diag(A))
+    return m
+
+
 def compute_strength_vector(X):
     strength_vector = np.sum(~np.isnan(X), axis=1) / X.shape[1]
     return strength_vector
 
-
-#@nb.njit
-def mask_dot(mask):
-    dot = np.empty((mask.shape[0], mask.shape[0]))
-    for i, row in mask:
-        for j, col in mask.T:
-            pass
-    pass
-
-def compute_strength_matrix(X):
+#@profile
+def compute_strength_matrix_(X):
     notmask = (~np.isnan(X)).astype(np.float32)
     strength_matrix = np.dot(notmask, notmask.T)
     strength_matrix /= X.shape[1]
     return strength_matrix
+
+
+#@profile
+def compute_strength_matrix(X):
+    strength_matrix = direct_dot(~np.isnan(X))
+    strength_matrix /= X.shape[1]
+    return strength_matrix
+
 
 def create_validation_mask(X_incomplete, percent_inds):
     masked_rows = np.isnan(X_incomplete).any(axis=1)
