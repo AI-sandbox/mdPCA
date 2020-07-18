@@ -14,7 +14,7 @@ import plotly
 import cvxpy as cvx
 from scipy.sparse.linalg import svds
 from distutils.util import strtobool
-from file_processing import get_masked_matrix, process_labels_weights, logger_config
+from gen_tools import array_process, process_labels_weights, logger_config
 from scipy.spatial.distance import squareform, pdist
 from skbio.stats.distance import mantel
 import scipy
@@ -247,23 +247,22 @@ def scatter_plot(X_projected, scatterplot_filename, output_filename, ind_IDs, la
     plotly.offline.plot(scatter, filename = scatterplot_filename, auto_open=False)
     plot_df.to_csv(output_filename, columns=['ID', 'x', 'y'], sep='\t', index=False)
     
-def run_method(beagle_or_vcf, beagle_filename, vcf_filename, is_masked, vit_or_fbk_or_tsv, vit_filename, fbk_filename, fb_or_msp, tsv_filename, num_ancestries, ancestry, prob_thresh, average_parents, is_weighted, labels_filename, output_filename, scatterplot_filename, save_masked_matrix, masked_matrix_filename, save_cov_matrix, cov_matrix_filename, robust):
-    X_incomplete, ind_IDs, rs_IDs = get_masked_matrix(beagle_filename, vcf_filename, beagle_or_vcf, is_masked, vit_filename, fbk_filename, tsv_filename, vit_or_fbk_or_tsv, fb_or_msp, num_ancestries, ancestry, average_parents, prob_thresh)
+def run_method(root_dir, beagle_or_vcf, beagle_vcf_filename, is_masked, vit_or_fbk_or_tsv, vit_fbk_tsv_filename, fb_or_msp, num_ancestries, ancestry, prob_thresh, average_parents, is_weighted, labels_filename, output_filename, scatterplot_filename, save_masked_matrix, masked_matrix_filename, save_cov_matrix, cov_matrix_filename, robust):
+    num_arrays = 1
+    masks, rs_ID_list, ind_ID_list = array_process(root_dir, beagle_vcf_filename, vit_fbk_tsv_filename, beagle_or_vcf, vit_or_fbk_or_tsv, fb_or_msp, num_arrays, num_ancestries, average_parents, prob_thresh, is_masked)
+    X_incomplete = masks[0][str(ancestry)].T
+    ind_IDs = ind_ID_list[0]
     X_incomplete, ind_IDs, labels, weights = process_labels_weights(labels_filename, X_incomplete, ind_IDs, average_parents, is_weighted, save_masked_matrix, masked_matrix_filename)
     WSW, S, W = run_cov_matrix(X_incomplete, weights, save_cov_matrix, cov_matrix_filename, robust)
-    if not robust:
-        X_projected, pc1_percentvar, pc2_percentvar = project_weighted_matrix(WSW, S, W)
-    else:
-        X_projected, pc1_percentvar, pc2_percentvar = project_weighted_matrix(WSW, S, W)
-
+    X_projected, pc1_percentvar, pc2_percentvar = project_weighted_matrix(WSW, S, W)
     scatter_plot(X_projected, scatterplot_filename, output_filename, ind_IDs, labels)
     print("Percent variance explained by the 1st principal component: ", pc1_percentvar)
     print("Percent variance explained by the 2nd principal component: ", pc2_percentvar)
 
 
 def get_args(params_file):
-    all_args = set(['BEAGLE_OR_VCF', 'BEAGLE_FILE', 'VCF_FILE', 'IS_MASKED',
-                    'VIT_OR_FBK_OR_TSV', 'VIT_FILE', 'FBK_FILE', 'FB_OR_MSP', 'TSV_FILE',
+    all_args = set(['ROOT_DIR', 'BEAGLE_OR_VCF', 'BEAGLE_VCF_FILE', 'IS_MASKED',
+                    'VIT_OR_FBK_OR_TSV', 'VIT_FBK_TSV_FILE', 'FB_OR_MSP',
                     'NUM_ANCESTRIES', 'ANCESTRY', 'PROB_THRESH', 'AVERAGE_PARENTS', 
                     'IS_WEIGHTED', 'LABELS_FILE', 'OUTPUT_FILE', 'SCATTERPLOT_FILE', 
                     'SAVE_MASKED_MATRIX', 'SAVE_MASKED_MATRIX', 'MASKED_MATRIX_FILE', 
