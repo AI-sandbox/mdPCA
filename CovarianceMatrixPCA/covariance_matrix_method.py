@@ -20,8 +20,11 @@ from skbio.stats.distance import mantel
 import scipy
 from sklearn.utils import check_array
 
-def process_masks(masks, rs_ID_list, ind_ID_list, ancestry):
-    masked_matrix = masks[0][ancestry].T
+def process_masks(masks, rs_ID_list, ind_ID_list, ancestry, is_masked):
+    if is_masked:
+        masked_matrix = masks[0][ancestry].T
+    else:
+        masked_matrix = masks[0].T
     rs_IDs = rs_ID_list[0]
     ind_IDs = ind_ID_list[0]
     return masked_matrix, rs_IDs, ind_IDs
@@ -261,7 +264,7 @@ def scatter_plot(X_projected, scatterplot_filename, output_filename, ind_IDs, la
     plotly.offline.plot(scatter, filename = scatterplot_filename, auto_open=False)
     plot_df.to_csv(output_filename, columns=['ID', 'x', 'y'], sep='\t', index=False)
     
-def run_method(root_dir, beagle_or_vcf, beagle_vcf_filename, is_masked, vit_or_fbk_or_tsv, vit_fbk_tsv_filename, fb_or_msp, num_ancestries, ancestry, prob_thresh, average_parents, is_weighted, labels_filename, output_filename, scatterplot_filename, save_mask, load_mask, mask_filename, save_cov_matrix, cov_matrix_filename, robust):
+def run_method(root_dir, beagle_or_vcf, beagle_vcf_filename, is_masked, vit_or_fbk_or_tsv, vit_fbk_tsv_filename, fb_or_msp, num_ancestries, ancestry, prob_thresh, average_parents, min_percent_snps, is_weighted, labels_filename, output_filename, scatterplot_filename, save_mask, load_mask, mask_filename, save_cov_matrix, cov_matrix_filename, robust):
     if load_mask:
         X_incomplete, rs_IDs, ind_IDs, labels, weights = load_mask_file(mask_filename)
     else:
@@ -269,25 +272,26 @@ def run_method(root_dir, beagle_or_vcf, beagle_vcf_filename, is_masked, vit_or_f
         save_masks = False
         masks_file = ''
         masks, rs_ID_list, ind_ID_list = array_process(root_dir, beagle_vcf_filename, vit_fbk_tsv_filename, beagle_or_vcf, vit_or_fbk_or_tsv, fb_or_msp, num_arrays, num_ancestries, average_parents, prob_thresh, is_masked, save_masks, masks_file)
-        X_incomplete, rs_IDs, ind_IDs = process_masks(masks, rs_ID_list, ind_ID_list, ancestry)
-        masked_matrix, ind_IDs, labels, weights = process_labels_weights(labels_filename, X_incomplete, rs_IDs, ind_IDs, average_parents, is_weighted, save_mask, mask_filename)
+        X_incomplete, rs_IDs, ind_IDs = process_masks(masks, rs_ID_list, ind_ID_list, ancestry, is_masked)
+        X_incomplete, ind_IDs, labels, weights = process_labels_weights(labels_filename, X_incomplete, rs_IDs, ind_IDs, average_parents, min_percent_snps, is_weighted, save_mask, mask_filename)
     WSW, S, W = run_cov_matrix(X_incomplete, weights, save_cov_matrix, cov_matrix_filename, robust)
     X_projected, pc1_percentvar, pc2_percentvar = project_weighted_matrix(WSW, S, W)
     scatter_plot(X_projected, scatterplot_filename, output_filename, ind_IDs, labels)
-    print("Percent variance explained by the 1st principal component: ", pc1_percentvar)
-    print("Percent variance explained by the 2nd principal component: ", pc2_percentvar)
+    logging.info("Percent variance explained by the 1st principal component: %s", pc1_percentvar)
+    logging.info("Percent variance explained by the 2nd principal component: %s", pc2_percentvar)
 
 
 def get_args(params_file):
     all_args = set(['ROOT_DIR', 'BEAGLE_OR_VCF', 'BEAGLE_VCF_FILE', 'IS_MASKED',
                     'VIT_OR_FBK_OR_TSV', 'VIT_FBK_TSV_FILE', 'FB_OR_MSP',
-                    'NUM_ANCESTRIES', 'ANCESTRY', 'PROB_THRESH', 'AVERAGE_PARENTS', 
-                    'IS_WEIGHTED', 'LABELS_FILE', 'OUTPUT_FILE', 'SCATTERPLOT_FILE', 
-                    'SAVE_MASK', 'LOAD_MASK', 'MASK_FILE', 'SAVE_COVARIANCE_MATRIX', 
-                    'COVARIANCE_MATRIX_FILE', 'ROBUST'])
+                    'NUM_ANCESTRIES', 'ANCESTRY', 'PROB_THRESH', 'AVERAGE_PARENTS',
+                    'MIN_PERCENT_SNPS', 'IS_WEIGHTED', 'LABELS_FILE', 'OUTPUT_FILE',
+                    'SCATTERPLOT_FILE', 'SAVE_MASK', 'LOAD_MASK', 'MASK_FILE',
+                    'SAVE_COVARIANCE_MATRIX', 'COVARIANCE_MATRIX_FILE', 'ROBUST'])
     int_args = ['BEAGLE_OR_VCF', 'VIT_OR_FBK_OR_TSV', 'FB_OR_MSP', 'NUM_ANCESTRIES']
     bool_args = ['IS_MASKED', 'AVERAGE_PARENTS', 'IS_WEIGHTED', 'SAVE_MASK', 
                  'LOAD_MASK', 'SAVE_COVARIANCE_MATRIX', 'ROBUST']
+    float_args = ['MIN_PERCENT_SNPS']
     args = {}
     with open(params_file) as fp:
         for line in fp:
@@ -312,7 +316,9 @@ def get_args(params_file):
     for val in int_args:
         args[val] = int(args[val])
     for val in bool_args:
-        args[val] = bool(strtobool(args[val]) )
+        args[val] = bool(strtobool(args[val]))
+    for val in float_args:
+        args[val] = float(args[val])
     logging.debug(f"parameters used are: {args}")
     return args
 
