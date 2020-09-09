@@ -1,5 +1,5 @@
-# CovarianceMatrixPCA
-Covariance Matrix PCA method for ancestry-specific dimensionality reduction.
+# mdPCA
+Missing DNA PCA algorithm for ancestry masked or ancient genomic data.
 
 ## Usage
 Run the method using the following command from command line.
