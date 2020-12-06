@@ -41,7 +41,7 @@ def cov(x):
     xmask = np.ma.getmaskarray(x)
     rowvar = 1
     axis = 1 - rowvar
-    xnotmask = np.logical_not(xmask).astype(np.float32)
+    xnotmask = np.logical_not(xmask).astype(np.float32) 
     fact = np.dot(xnotmask, xnotmask.T) * 1. - ddof
     del(xnotmask)
     gc.collect()
@@ -57,7 +57,7 @@ def direct_dot(A):
         A = check_array(A, copy=False, order="F")
     dot = scipy.linalg.get_blas_funcs("syrk", (A,))
     m = dot(alpha=1.0, a=A)
-    m += m.T
+    m += m.T 
     m -= np.diag(np.diag(A))
     return m
 
@@ -84,7 +84,7 @@ def compute_strength_matrix(X):
 def create_validation_mask(X_incomplete, percent_inds):
     masked_rows = np.isnan(X_incomplete).any(axis=1)
     masked_inds = np.flatnonzero(masked_rows)
-    X_masked = X_incomplete[masked_rows]
+    X_masked = X_incomplete[masked_rows] 
     percent_masked = 100 * np.isnan(X_masked).sum() / (X_masked.shape[0] * X_masked.shape[1])
     unmasked_rows = ~masked_rows
     X_unmasked = X_incomplete[unmasked_rows]
@@ -120,17 +120,17 @@ def run_cov_matrix(X_incomplete, weights, save_cov_matrix, cov_matrix_filename, 
     S = demean(S, weights_normalized)
     logging.info("Covariance Matrix --- %s seconds ---" % (time.time() - start_time))
     W = np.diag(weights)
-    if robust:
+    if robust: 
         logging.info("Starting matrix completion. This will take a few minutes...")
         start_time = time.time()
-        percent_inds_val = 20 # Percent of unmasked individuals to be masked for cross-validation
+        percent_inds_val = 20 # Percent of unmasked individuals to be masked for cross-validation 
         X_incomplete, masked_inds_val = create_validation_mask(X_incomplete.data, percent_inds_val) # masked_inds_val is the list of indices of the individuals masked for validation
         X_incomplete = np.ma.array(X_incomplete, mask=np.isnan(X_incomplete))
         S_prime, w_vec_prime, w_mat_prime = cov(X_incomplete)
         del X_incomplete
         gc.collect()
         S_prime = demean(S_prime, weights_normalized)
-        S, lam = matrix_completion(S, strength_mat, S_prime, w_mat_prime, lams=None, method="NN",
+        S, lam = matrix_completion(S, strength_mat, S_prime, w_mat_prime, lams=None, method="NN", 
                 cv_inds=masked_inds_val)
         logging.info(f"Covariance Matrix --- %{time.time() - start_time:.2}s seconds ---")
     WSW = np.matmul(np.matmul(np.sqrt(W), S), np.sqrt(W))
@@ -151,55 +151,54 @@ def project_weighted_matrix(WSW, S, W):
     return X_projected, pc1_percentvar, pc2_percentvar
 
 def principal_cosine_affinity(X, Y, QX=None, QY=None):
-  # Returns the *average* principal cosine between the subspaces range(X) and
-  # range(Y). It is assumed X and Y have the same number of rows, but may have
-  # a different number of columns. The average is taken over
-  #
-  #   min(X.shape[0], max(X.shape[1], Y.shape[1]))
-  #
-  # This choice of normalization is so that the principal cosine is equal to
-  # one if and only if range(X) = range(Y).
-  #
-  # The function takes by default the matrices X, Y as arguments. As an
-  # alternative, an orthonormal basis for range(X) and range(Y) can be
-  # provided. Otherwise, the QR factorization is computed.
-  #
-  # Parameters:
-  # ___________
-  # X : n x m
-  #     First data matrix
-  # Y : n x k
-  #     Second data matrix
-  # QX : n x m (optional)
-  #     Orthonormal basis for range(X)
-  # QY : n x k (optional)
-  #     Orthonormal basis for range(Y)
-  #
-  # Returns:
-  # ________
-  # a : scalar in (0, 1)
-  #     Average principal cosine between range(X) and range(Y)
-  #
-  if QX is None:
-    QX = np.linalg.qr(X)[0]
-  if QY is None:
-    QY = np.linalg.qr(Y)[0]
-  n = np.minimum(QX.shape[0], np.max([ QX.shape[1], QY.shape[1] ]))
-  s = np.linalg.svd(np.matmul(QX.conj().T, QY))[1]
-  return np.sum(s) / n
-
+    # Returns the *average* principal cosine between the subspaces range(X) and
+    # range(Y). It is assumed X and Y have the same number of rows, but may have
+    # a different number of columns. The average is taken over
+    #
+    #   min(X.shape[0], max(X.shape[1], Y.shape[1]))
+    #
+    # This choice of normalization is so that the principal cosine is equal to
+    # one if and only if range(X) = range(Y).
+    #
+    # The function takes by default the matrices X, Y as arguments. As an
+    # alternative, an orthonormal basis for range(X) and range(Y) can be
+    # provided. Otherwise, the QR factorization is computed.
+    #
+    # Parameters:
+    # ___________
+    # X : n x m
+    #     First data matrix
+    # Y : n x k
+    #     Second data matrix
+    # QX : n x m (optional)
+    #     Orthonormal basis for range(X)
+    # QY : n x k (optional)
+    #     Orthonormal basis for range(Y)
+    #
+    # Returns:
+    # ________
+    # a : scalar in (0, 1)
+    #     Average principal cosine between range(X) and range(Y)
+    #
+    if QX is None:
+        QX = np.linalg.qr(X)[0]
+    if QY is None:
+        QY = np.linalg.qr(Y)[0]
+    n = np.minimum(QX.shape[0], np.max([ QX.shape[1], QY.shape[1] ]))
+    s = np.linalg.svd(np.matmul(QX.conj().T, QY))[1]
+    return np.sum(s) / n
 
 def NN_matrix_completion(cov, w, lam, cov0, verbose=False):
     """ Nuclear norm matrix completion (as in Candes and Recht, 2009 for a PSD matrix)
-        objective: lam ||X||_* + ||w^1/2 (cov - X)||_2^2  with X = PSD
+        objective: lam ||X||_* + ||w^1/2 (cov - X)||_2^2  with X = PSD 
 
     Parameters
     ----------
-    cov : n x n
+    cov : n x n 
         Input cov matrix to be denoised
 
     w : n x n
-        Weight matrix for confidence in elements of cov
+        Weight matrix for confidence in elements of cov 
 
     lam : float
         Regularization parameter determining the rank of the solution. Higher lam -> lower rank
@@ -220,7 +219,7 @@ def NN_matrix_completion(cov, w, lam, cov0, verbose=False):
     if cov0 is None:
         u, s, v = svds(cov, k=10)
         cov0 = u@np.diag(s)@u.T
-    try:
+    try: 
         X.value = cov0
     except ValueError:
         X.value = None
@@ -241,16 +240,16 @@ def cov_to_dist(cov_matrix):
 
 def matrix_completion(cov, w, cv_cov, cv_w, cv_inds=None, lams=None, method="NN",
         verbose=False, ncpus=None, parallel=False):
-    """
-    objective: lam ||X||_* + ||w^1/2 (cov - X)||_2^2  with X = PSD
+    """ 
+    objective: lam ||X||_* + ||w^1/2 (cov - X)||_2^2  with X = PSD 
 
     Parameters
     ----------
-    cov : n x n
+    cov : n x n 
         Input cov matrix to be denoised
 
     w : n x n
-        Weight matrix for confidence in elements of cov
+        Weight matrix for confidence in elements of cov 
 
     verbose : bool, default = False
         verbosity level of cvxpy
@@ -273,11 +272,11 @@ def matrix_completion(cov, w, cv_cov, cv_w, cv_inds=None, lams=None, method="NN"
     if cv_inds is not None:
         dist = dist[cv_inds, :][:, cv_inds]
     u, s, v = svds(cov, k=10)
-    warm_start = u @ np.diag(s) @ u.T + np.eye(cov.shape[0]) * s[0]/100
+    warm_start = u @ np.diag(s) @ u.T + np.eye(cov.shape[0]) * s[0]/100 
     performance, score  = [], 0
     for i, lam in enumerate(lams): # not parallel
-        if lam < 1e-4:
-            continue
+        if lam < 1e-4: 
+            continue 
         val = dispatcher(method, **{"cov": cv_cov, "cov0":warm_start, "w": cv_w, "lam":lam})
         if cv_inds is not None:
         # Using a known subset to cv
@@ -298,8 +297,8 @@ def scatter_plot(X_projected, scatterplot_filename, output_filename, ind_IDs, la
     scatter = px.scatter(plot_df, x='x', y='y', color='Label', hover_name='ID', color_discrete_sequence=px.colors.qualitative.Alphabet)
     plotly.offline.plot(scatter, filename = scatterplot_filename, auto_open=False)
     plot_df.to_csv(output_filename, columns=['ID', 'x', 'y'], sep='\t', index=False)
-
-def run_method(root_dir, beagle_or_vcf, beagle_vcf_filename, is_masked, vit_or_fbk_or_tsv, vit_fbk_tsv_filename, fb_or_msp, num_ancestries, ancestry, prob_thresh, average_parents, groups_to_remove, min_percent_snps, is_weighted, labels_filename, output_filename, scatterplot_filename, save_masks, load_masks, masks_filename, save_cov_matrix, cov_matrix_filename, robust):
+    
+def run_method(root_dir, beagle_vcf_filename, is_masked, vit_fbk_tsv_filename, num_ancestries, ancestry, prob_thresh, average_parents, groups_to_remove, min_percent_snps, is_weighted, labels_filename, output_filename, scatterplot_filename, save_masks, load_masks, masks_filename, save_cov_matrix, cov_matrix_filename, robust):
     if not is_masked:
         num_ancestries = 1
         ancestry = '1'
@@ -307,7 +306,7 @@ def run_method(root_dir, beagle_or_vcf, beagle_vcf_filename, is_masked, vit_or_f
         masks, rs_ID_list, ind_ID_list, labels, weights = load_mask_file(masks_filename)
     else:
         num_arrays = 1
-        masks, rs_ID_list, ind_ID_list = array_process(root_dir, beagle_vcf_filename, vit_fbk_tsv_filename, beagle_or_vcf, vit_or_fbk_or_tsv, fb_or_msp, num_arrays, num_ancestries, average_parents, prob_thresh, is_masked)
+        masks, rs_ID_list, ind_ID_list = array_process(root_dir, beagle_vcf_filename, vit_fbk_tsv_filename, num_arrays, num_ancestries, average_parents, prob_thresh, is_masked)
         masks, ind_ID_list, labels, weights = process_labels_weights(labels_filename, masks, rs_ID_list, ind_ID_list, average_parents, num_arrays, ancestry, min_percent_snps, groups_to_remove, is_weighted, save_masks, masks_filename)
     X_incomplete, rs_IDs, ind_IDs = process_masks(masks, rs_ID_list, ind_ID_list, ancestry, is_masked)
     WSW, S, W = run_cov_matrix(X_incomplete, weights, save_cov_matrix, cov_matrix_filename, robust)
@@ -318,14 +317,13 @@ def run_method(root_dir, beagle_or_vcf, beagle_vcf_filename, is_masked, vit_or_f
 
 
 def get_args(params_file):
-    all_args = set(['ROOT_DIR', 'BEAGLE_OR_VCF', 'BEAGLE_VCF_FILE', 'IS_MASKED',
-                    'VIT_OR_FBK_OR_TSV', 'VIT_FBK_TSV_FILE', 'FB_OR_MSP',
+    all_args = set(['ROOT_DIR', 'BEAGLE_VCF_FILE', 'IS_MASKED', 'VIT_FBK_TSV_FILE',
                     'NUM_ANCESTRIES', 'ANCESTRY', 'PROB_THRESH', 'AVERAGE_PARENTS',
                     'GROUPS_TO_REMOVE', 'MIN_PERCENT_SNPS', 'IS_WEIGHTED', 'LABELS_FILE',
                     'OUTPUT_FILE', 'SCATTERPLOT_FILE', 'SAVE_MASKS', 'LOAD_MASKS', 'MASKS_FILE',
                     'SAVE_COVARIANCE_MATRIX', 'COVARIANCE_MATRIX_FILE', 'ROBUST'])
-    int_args = ['BEAGLE_OR_VCF', 'VIT_OR_FBK_OR_TSV', 'FB_OR_MSP', 'NUM_ANCESTRIES']
-    bool_args = ['IS_MASKED', 'AVERAGE_PARENTS', 'IS_WEIGHTED', 'SAVE_MASKS',
+    int_args = ['NUM_ANCESTRIES']
+    bool_args = ['IS_MASKED', 'AVERAGE_PARENTS', 'IS_WEIGHTED', 'SAVE_MASKS', 
                  'LOAD_MASKS', 'SAVE_COVARIANCE_MATRIX', 'ROBUST']
     dict_args = ['GROUPS_TO_REMOVE']
     float_args = ['MIN_PERCENT_SNPS']
@@ -364,7 +362,7 @@ def get_args(params_file):
 
 def run(params_filename):
     args = get_args(params_filename)
-    kwargs = {key.lower().replace("covariance", "cov").replace("file", "filename"):
+    kwargs = {key.lower().replace("covariance", "cov").replace("file", "filename"): 
             args[key] for key in args.keys()}
     run_method(**kwargs)
 
@@ -376,6 +374,6 @@ def main():
     start_time = time.time()
     run(params_filename)
     logging.info("Total time --- %s seconds ---" % (time.time() - start_time))
-
+    
 if __name__ == "__main__":
     main()
