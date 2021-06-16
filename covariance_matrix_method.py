@@ -500,8 +500,8 @@ def principal_cosine_affinity(X, Y, QX=None, QY=None):
 
 def scatter_plot(X_projected, scatterplot_filename, output_filename, ind_IDs, labels, num_dims):
     plot_df = pd.DataFrame()
-    plot_df['x'] = X_projected[:,1]
-    plot_df['y'] = -X_projected[:,0]
+    plot_df['x'] = X_projected[:,0]
+    plot_df['y'] = X_projected[:,1]
     plot_df['Label'] = labels
     plot_df['ID'] = ind_IDs
     scatter = px.scatter(plot_df, x='x', y='y', color='Label', hover_name='ID', color_discrete_sequence=px.colors.qualitative.Alphabet)
