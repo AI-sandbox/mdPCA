@@ -87,10 +87,9 @@ def method1(X_incomplete, weights, save_cov_matrix, cov_matrix_filename, num_dim
     D = np.diag(np.sqrt(svd.singular_values_))
     T = np.matmul(U, D)
     total_var = np.trace(S)
-    pc1_percentvar = 100 * svd.singular_values_[0] / total_var
-    pc2_percentvar = 100 * svd.singular_values_[1] / total_var
-    logging.info("Percent variance explained by the 1st principal component: %s", pc1_percentvar)
-    logging.info("Percent variance explained by the 2nd principal component: %s", pc2_percentvar)
+    for i in range(num_dims):
+        pc_percentvar = 100 * svd.singular_values_[i] / total_var
+        logging.info("Percent variance explained by the principal component %d: %s", i + 1, pc_percentvar)
     return T
 
 def create_validation_mask(X_incomplete, percent_inds):
@@ -276,10 +275,9 @@ def method2(X_incomplete, save_cov_matrix, cov_matrix_filename, num_dims):
             i_filled = np.append(i_filled, i)
             T_filled = np.append(T_filled, [t], axis=0)
         total_var = np.trace(S)
-        pc1_percentvar = 100 * svd.singular_values_[0] / total_var
-        pc2_percentvar = 100 * svd.singular_values_[1] / total_var
-        logging.info("Percent variance explained by the 1st principal component: %s", pc1_percentvar)
-        logging.info("Percent variance explained by the 2nd principal component: %s", pc2_percentvar)
+        for i in range(num_dims):
+            pc_percentvar = 100 * svd.singular_values_[i] / total_var
+            logging.info("Percent variance explained by the principal component %d: %s", i + 1, pc_percentvar)
         return T
     
     S, S_robust = run_cov_matrix_method2(X_incomplete, save_cov_matrix, cov_matrix_filename)
@@ -330,10 +328,9 @@ def method3(X_incomplete, percent_vals_masked, save_cov_matrix, cov_matrix_filen
     D = np.diag(np.sqrt(svd.singular_values_))
     T = np.matmul(U, D)
     total_var = np.trace(S)
-    pc1_percentvar = 100 * svd.singular_values_[0] / total_var
-    pc2_percentvar = 100 * svd.singular_values_[1] / total_var
-    logging.info("Percent variance explained by the 1st principal component: %s", pc1_percentvar)
-    logging.info("Percent variance explained by the 2nd principal component: %s", pc2_percentvar)
+    for i in range(num_dims):
+        pc_percentvar = 100 * svd.singular_values_[i] / total_var
+        logging.info("Percent variance explained by the principal component %d: %s", i + 1, pc_percentvar)
     return T
 
 def method4(X_incomplete, percent_vals_masked, save_cov_matrix, cov_matrix_filename, num_dims):
@@ -380,10 +377,9 @@ def method4(X_incomplete, percent_vals_masked, save_cov_matrix, cov_matrix_filen
             i_filled = np.append(i_filled, i)
             T_filled = np.append(T_filled, [t], axis=0)
         total_var = np.trace(S)
-        pc1_percentvar = 100 * svd.singular_values_[0] / total_var
-        pc2_percentvar = 100 * svd.singular_values_[1] / total_var
-        logging.info("Percent variance explained by the 1st principal component: %s", pc1_percentvar)
-        logging.info("Percent variance explained by the 2nd principal component: %s", pc2_percentvar)
+        for i in range(num_dims):
+            pc_percentvar = 100 * svd.singular_values_[i] / total_var
+            logging.info("Percent variance explained by the principal component %d: %s", i + 1, pc_percentvar)
         return T
     
     S, W = run_cov_matrix_method4(X_incomplete, save_cov_matrix, cov_matrix_filename)
@@ -428,10 +424,9 @@ def method5(X_incomplete, save_cov_matrix, cov_matrix_filename, num_dims):
             i_filled = np.append(i_filled, i)
             T_filled = np.append(T_filled, [t], axis=0)
         total_var = np.trace(S)
-        pc1_percentvar = 100 * svd.singular_values_[0] / total_var
-        pc2_percentvar = 100 * svd.singular_values_[1] / total_var
-        logging.info("Percent variance explained by the 1st principal component: %s", pc1_percentvar)
-        logging.info("Percent variance explained by the 2nd principal component: %s", pc2_percentvar)
+        for i in range(num_dims):
+            pc_percentvar = 100 * svd.singular_values_[i] / total_var
+            logging.info("Percent variance explained by the principal component %d: %s", i + 1, pc_percentvar)
         return T
     
     S_nonmissing = run_cov_matrix_method5(X_incomplete, save_cov_matrix, cov_matrix_filename)
